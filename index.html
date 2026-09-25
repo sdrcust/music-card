@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>音乐NFC卡片</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
+        body{
+            height:100vh;
+            background:#1a1a1a;
+            color:#fff;
+            display:flex;
+            flex-direction:column;
+            align-items:center;
+            justify-content:center;
+            text-align:center;
+            padding:20px;
+        }
+        .title{font-size:26px;margin-bottom:40px;}
+        .playBtn{
+            width: 280px;
+            margin:12px 0;
+            padding:16px 20px;
+            font-size:18px;
+            border:none;
+            border-radius:999px;
+            background:#4285f4;
+            color:white;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">NFC音乐卡片</div>
+
+    <button class="playBtn" onclick="playAudio('qinaidenia.mp3','亲爱的你啊')">亲爱的你啊</button>
+    <button class="playBtn" onclick="playAudio('woyaoni.mp3','我要你')">我要你</button>
+    <button class="playBtn" onclick="playAudio('nideyanshen.mp3','你的眼神')">你的眼神</button>
+
+    <audio id="audioPlayer">
+
+    <script>
+        const audio = document.getElementById('audioPlayer');
+        let currentSongName = "";
+
+        function playAudio(src, songName){
+            // 如果正在播放同一首，则暂停
+            if(audio.src.endsWith(src) && !audio.paused){
+                audio.pause();
+                return;
+            }
+            audio.src = src;
+            audio.play();
+            currentSongName = songName;
+        }
+    </script>
+</body>
+</html>
