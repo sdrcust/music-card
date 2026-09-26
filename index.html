@@ -1,58 +1,170 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>音乐NFC卡片</title>
-    <style>
-        *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
-        body{
-            height:100vh;
-            background:#1a1a1a;
-            color:#fff;
-            display:flex;
-            flex-direction:column;
-            align-items:center;
-            justify-content:center;
-            text-align:center;
-            padding:20px;
-        }
-        .title{font-size:26px;margin-bottom:40px;}
-        .playBtn{
-            width: 280px;
-            margin:12px 0;
-            padding:16px 20px;
-            font-size:18px;
-            border:none;
-            border-radius:999px;
-            background:#4285f4;
-            color:white;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>音乐NFC卡片</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  background:#111;
+  color:#fff;
+  padding:40px 20px;
+  gap:24px;
+}
+h1{
+  font-size:32px;
+  font-weight:normal;
+}
+.music-btn{
+  width:85%;
+  padding:22px;
+  border:none;
+  border-radius:999px;
+  font-size:24px;
+  background:#3b82f6; /* 默认蓝色 */
+  color:white;
+  cursor:pointer;
+  transition: background 0.3s;
+}
+.music-btn.playing{
+  background:#22c55e; /* 播放中绿色 */
+}
+/* 歌词容器 */
+.lyric-box{
+  width:100%;
+  height:320px;
+  overflow:hidden;
+  position:relative;
+  border-radius:12px;
+}
+.lyric-wrap{
+  transition: transform 0.3s ease-out;
+}
+.lyric-line{
+  text-align:center;
+  padding:14px 0;
+  font-size:20px;
+  color:#999;
+  transition: all 0.3s;
+}
+.lyric-line.active{
+  color:#fff;
+  font-size:24px;
+  font-weight:bold;
+}
+</style>
 </head>
 <body>
-    <div class="title">NFC音乐卡片</div>
+  <h1>NFC音乐卡片</h1>
 
-    <button class="playBtn" onclick="playAudio('qinaidenia.mp3','亲爱的你啊')">亲爱的你啊</button>
-    <button class="playBtn" onclick="playAudio('woyaoni.mp3','我要你')">我要你</button>
-    <button class="playBtn" onclick="playAudio('nideyanshen.mp3','你的眼神')">你的眼神</button>
+  <button class="music-btn" data-src="qinaidenia.mp3" data-lrc="[00:16.24]亲爱的你啊\n[00:19.36]我们好久没见\n[00:22.97]有没有长大一点\n[00:29.89]破旧的以前\n[00:32.87]走不出的渔湾\n[00:37.67]停在荒草漫天\n[00:43.56]那时家里面\n[00:46.63]妈妈总在掩面\n[00:50.32]窗外酒气弥漫\n[00:57.40]你想你打算\n[01:00.26]忘掉满身斑斓\n[01:05.05]长出翅膀飞远\n[01:10.56]孤单绕着思念 流淌着的不安\n[01:17.43]每一步每一晚 踩住了 梦魇\n[01:28.17]你会翻过山 看到万丈晴天\n[01:34.96]飞鸟正越过海面\n[01:41.72]你会迎着风 放着胆唱着歌\n[01:49.54]把风景都看遍\n[02:09.51]你会翻过山 看到万丈晴天\n[02:16.07]飞鸟正越过海面\n[02:22.89]你会迎着风 放着胆唱着歌\n[02:30.69]把风景都看遍\n[02:36.85]你会翻过山看到万里平原\n[02:43.51]天光正穿过云间\n[02:50.37]你会握着拳赤着脚流着汗\n[02:58.20]攀过千难万险\n[03:31.85]窗外 有小孩\n[03:34.92]哼哼唱 水声荡\n[03:39.82]远去了一只船">亲爱的你啊</button>
 
-    <audio id="audioPlayer">
+  <button class="music-btn" data-src="woyaoni.mp3" data-lrc="[00:01.71]我要 你在我身旁\n[00:08.55]我要 你为我梳妆\n[00:15.26]这夜的风儿吹\n[00:18.62]吹得心痒痒 我的情郎\n[00:22.46]我在他乡 望着月亮\n[00:29.80]都怪这月色 撩人的风光\n[00:37.01]都怪这 guitar 弹得太凄凉\n[00:44.31]哦 我要唱着歌\n[00:47.59]默默把你想 我的情郎\n[00:51.56]你在何方 眼看天亮\n[01:13.24]都怪这夜色 撩人的风光\n[01:20.64]都怪这guitar 弹得太凄凉\n[01:27.95]哦 我要唱着歌\n[01:31.37]默默把你想 我的情郎\n[01:35.21]你在何方 眼看天亮\n[01:42.81]我要 美丽的衣裳\n[01:50.38]为你 对镜贴花黄\n[01:57.04]这夜色太紧张\n[02:00.38]时间太漫长 我的情郎\n[02:04.36]我在他乡 望着月亮">我要你</button>
 
-    <script>
-        const audio = document.getElementById('audioPlayer');
-        let currentSongName = "";
+  <button class="music-btn" data-src="nideyanshen.mp3" data-lrc="[00:21.500]像一阵细雨洒落我心底\n[00:26.800]那感觉如此神秘\n[00:32.799]我不禁抬起头看着你\n[00:38.390]而你并不露痕迹\n[00:46.789]虽然不言不语\n[00:52.639]叫人难忘记\n[00:58.719]那是你的眼神\n[01:01.689]明亮又美丽\n[01:04.629]啊  友情天地\n[01:11.799]我满心欢喜\n[01:41.539]像一阵细雨洒落我心底\n[01:47.389]那感觉如此神秘\n[01:52.539]我不禁抬起头看着你\n[01:58.900]而你并不露痕迹\n[02:05.609]虽然不言不语\n[02:12.430]叫人难忘记\n[02:18.800]那是你的眼神\n[02:21.210]明亮又美丽\n[02:24.240]啊 友情天地\n[02:30.390]我满心欢喜\n[03:03.900]虽然不言不语\n[03:08.820]叫人难忘记\n[03:14.660]那是你的眼神\n[03:17.570]明亮又美丽\n[03:20.578]啊 友情天地\n[03:26.710]我满心欢喜">你的眼神</button>
 
-        function playAudio(src, songName){
-            // 如果正在播放同一首，则暂停
-            if(audio.src.endsWith(src) && !audio.paused){
-                audio.pause();
-                return;
-            }
-            audio.src = src;
-            audio.play();
-            currentSongName = songName;
-        }
-    </script>
+  <button class="music-btn" data-src="mopamopa.mp3" data-lrc="[00:18.81]什么是答案？是落叶说 秋天真好看\n[00:25.54]被河流哭着打湿了 衣衫 它依然漂走\n[00:33.94]什么是相爱？是留不下 所以花要开\n[00:42.17]是明知那站台无人 归来 也声声呼唤\n[00:51.80]小小娃儿 你莫怕\n[00:56.15]莫怕风儿吹落 满山花\n[01:00.46]莫怕蝉 只喧哗一夏\n[01:04.07]人间留不住的 最美啊\n[01:09.36]小小娃儿哟 你莫怕\n[01:14.22]莫怕大雨 匆匆地落下\n[01:17.65]一个人 也像一滴雨\n[01:22.27]天空到泥土是 回了家\n[01:25.75]我们去看短暂的花吧\n[01:30.08]去爱终将逝去的爱吧\n[01:34.12]蝴蝶明年不回来 为不回来飞啊\n[01:43.07]什么最绚烂？是你与我 人间转一转\n[01:51.33]在阳光尚好的日子 朝着 朝着山上走\n[01:59.65]什么最孤单？是我知晓 所有的遗憾\n[02:09.17]却依然泪如雨下的 牵着 牵着他的手\n[02:34.84]小小娃儿哟 你莫怕\n[02:39.77]莫怕大雨 匆匆地落下\n[02:43.03]一个人 也像一滴雨\n[02:48.23]天空到泥土是 回了家\n[02:51.29]我们去看短暂的花吧\n[02:55.59]去爱终将逝去的爱吧\n[02:59.81]蝴蝶明年不回来 为不回来飞啊\n[03:08.67]什么最绚烂？是你与我 人间转一转\n[03:16.27]在阳光尚好的日子 朝着 朝着山上走\n[03:26.57]什么最孤单？是我知晓 所有的遗憾\n[03:33.95]却依然泪如雨下的 牵着 牵着他的手\n[03:43.48]什么是答案？是落叶说 秋天真好看\n[03:50.75]被河流哭着打湿了 衣衫 它依然漂走\n[04:01.06]什么是相爱？是留不下 所以花要开\n[04:08.52]是明知那站台无人 归来 也声声呼唤\n[04:16.56]是我们那么傻知晓 答案 却依然相爱">mopamopa</button>
+
+  <button class="music-btn" data-src="zhangxianyusan.mp3" data-lrc="[00:18.39]生锈的和弦\n[00:21.92]前面坐着神仙\n[00:25.72]神仙喝红了脸\n[00:29.43]神仙没有钱\n[00:33.52]神仙看着天边\n[00:37.41]天边放着以前\n[00:40.98]以前荡着比干\n[00:44.81]以前惦记以前\n[00:49.15]这神仙疯癫\n[00:52.76]这神仙有谎言\n[00:56.82]他含着仙丹\n[01:00.63]他要饼干\n[01:21.84]张三问天\n[01:25.39]张三捂脸\n[01:29.23]一座荒唐殿\n[01:32.77]一个小房间\n[01:38.63]人是人 仙是仙\n[01:45.83]仙想饼干 人想颠\n[02:23.56]张三问天\n[02:26.86]张三捂脸\n[02:30.67]一座荒唐殿\n[02:34.23]一个小房间\n[02:39.92]人是人 仙是仙\n[02:47.38]仙想饼干 人想颠\n[02:55.06]人是人 仙是仙\n[03:02.65]仙想饼干 人想颠\n[03:10.50]送你白纸 做书签">张仙语三</button>
+
+  <div class="lyric-box">
+    <div class="lyric-wrap" id="lyricWrap"></div>
+  </div>
+
+  <audio id="player">
+
+<script>
+const player = document.getElementById('player');
+const btns = document.querySelectorAll('.music-btn');
+const lyricWrap = document.getElementById('lyricWrap');
+let lyricList = [];
+
+// LRC歌词解析函数
+function parseLRC(lrcText){
+  if(!lrcText) return [];
+  const lines = lrcText.split('\n');
+  const result = [];
+  const reg = /\[(\d{2}):(\d{2})\.(\d{2})\]/;
+  lines.forEach(line=>{
+    const match = line.match(reg);
+    if(!match) return;
+    const min = Number(match[1]);
+    const sec = Number(match[2]);
+    const ms = Number(match[3]);
+    const time = min*60 + sec + ms/100;
+    const text = line.replace(reg,"").trim();
+    if(text) result.push({time,text});
+  })
+  return result.sort((a,b)=>a.time-b.time);
+}
+
+// 渲染歌词DOM
+function renderLyric(list){
+  lyricWrap.innerHTML = "";
+  lyricList = list;
+  if(list.length === 0){
+    lyricWrap.innerHTML = `<div class="lyric-line">暂无歌词</div>`;
+    return;
+  }
+  list.forEach(item=>{
+    const div = document.createElement('div');
+    div.className = "lyric-line";
+    div.innerText = item.text;
+    lyricWrap.appendChild(div);
+  })
+}
+
+// 更新歌词高亮+滚动
+function updateLyric(){
+  const currentTime = player.currentTime;
+  let activeIndex = 0;
+  for(let i=0;i<lyricList.length;i++){
+    if(currentTime >= lyricList[i].time){
+      activeIndex = i;
+    }else break;
+  }
+  const lines = document.querySelectorAll('.lyric-line');
+  lines.forEach((line,idx)=>{
+    line.classList.toggle('active', idx === activeIndex);
+  })
+  // 滚动居中
+  lyricWrap.style.transform = `translateY(${ -activeIndex * 48 + 120 }px)`;
+}
+
+// 按钮点击事件
+btns.forEach(btn=>{
+  btn.onclick = function(){
+    const audioSrc = this.dataset.src;
+    const lrcRaw = this.dataset.lrc;
+    // 如果点当前正在播放的歌，则暂停
+    if(player.src.includes(audioSrc) && !player.paused){
+      player.pause();
+      btns.forEach(b=>b.classList.remove('playing'));
+      return;
+    }
+    // 重置所有按钮
+    btns.forEach(b=>b.classList.remove('playing'));
+    this.classList.add('playing');
+    player.src = audioSrc;
+    renderLyric(parseLRC(lrcRaw));
+    player.play();
+  }
+})
+
+// 播放进度持续更新歌词
+player.ontimeupdate = updateLyric;
+
+// 播放结束
+player.onended = ()=>{
+  btns.forEach(b=>b.classList.remove('playing'));
+  lyricWrap.innerHTML = "";
+  lyricList = [];
+}
+</script>
 </body>
 </html>
