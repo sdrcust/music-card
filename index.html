@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 移动端视口适配，NFC打开浏览器正常显示 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC音乐播放器</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
+        body{background:#111;color:#fff;padding:20px}
+
+        /* 顶部提示栏：代码保留，display:none视觉隐藏，后续需要提示直接删掉display:none */
+        .tip-bar{
+            background:#ff782b;
+            color:#000;
+            padding:10px 14px;
+            border-radius:8px;
+            margin-bottom:20px;
+            font-size:14px;
+            line-height:1.5;
+            display:none;
+        }
+
+        /* 支付宝内置浏览器拦截弹窗，检测到支付宝webview弹出提示 */
+        .alipay-mask{
+            position:fixed;
+            inset:0;
+            background:#000c;
+            z-index:9999;
+            display:none;
+            align-items:center;
+            justify-content:center;
+            padding:20px;
+        }
+        .alipay-box{
+            background:#222;
+            padding:28px 22px;
+            border-radius:12px;
+            max-width:420px;
+        }
+        .alipay-box h3{color:#ff6b6b;margin-bottom:12px}
+        .alipay-box p{line-height:1.7;color:#eee;font-size:16px}
+
+        /* 歌曲按钮容器，自动换行 */
+        .btn-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:30px}
+        .play-btn{padding:10px 16px;font-size:16px;border:none;border-radius:8px;cursor:pointer;background:#333;color:#fff}
+        .play-btn.active{background:#2185ff;color:#fff}
+
+        /* ==========歌词容器========== */
+        /* lyric-box：歌词可视取景框，固定最大占屏幕60%高度，超出部分裁剪隐藏 */
+        .lyric-box{
+            min-height:320px;
+            max-height:60vh;
+            height:60vh;         /* 明确高度，用于JS计算滚动位置 */
+            overflow:hidden;     /* 框外歌词直接看不见，实现取景器效果 */
+            position:relative;
+            margin-top:16px;
+        }
+        /* lyric-inner：歌词滚动内层容器，整体上下位移实现滚动 */
+        /* transition:none：关闭css过渡动画，避免和JS高频transform冲突导致中途卡死 */
+        .lyric-inner{
+            transition:none;
+            will-change: transform; /* 浏览器GPU加速transform滚动，提升手机流畅度 */
+        }
+        /* 单行歌词：强制固定40px高度，JS滚动计算行高必须和DOM实际高度完全一致 */
+        .lyric-line{
+            padding:0 10px;
+            text-align:center;
+            font-size:18px;
+            color:#aaa;
+            height:40px;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+        }
+        /* 当前正在演唱高亮歌词 */
+        .lyric-line.active{
+            color:#2185ff;
+            font-weight:bold;
+            font-size:20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 支付宝弹窗遮罩 -->
+    <div class="alipay-mask" id="alipayMask">
+        <div class="alipay-box">
+            <h3>⚠️ 当前在支付宝内置浏览器</h3>
+            <p>支付宝内置浏览器不支持音频播放。<br><br>请点页面右上角 ··· → <strong>在浏览器打开</strong>，即可正常播放音乐。</p>
+        </div>
+    </div>
+
+    <!-- 顶部提示，CSS隐藏 -->
+    <div class="tip-bar">
+        💡提示：如果触碰后跳到支付宝，请点右上角「在浏览器打开」才能播放歌曲
+    </div>
+
+    <!-- 歌曲按钮渲染位置 -->
+    <div class="btn-wrap" id="btnWrap"></div>
+
+    <!-- 歌词DOM容器 -->
+    <div class="lyric-box">
+        <div class="lyric-inner" id="lyricWrap"></div>
+    </div>
+
+    <script>
+        // 判断当前是否处于支付宝内置浏览器
+        function isAlipayWebView(){
+            const ua = navigator.userAgent.toLowerCase();
+            return ua.indexOf('alipay') !== -1;
+        }
+        const alipayMask = document.getElementById('alipayMask');
+        if(isAlipayWebView()){
+            alipayMask.style.display = 'flex';
+            window.canPlayAudio = false;
+        }else{
+            window.canPlayAudio = true;
+        }
+
+        // =================歌曲配置区================
+        // 每首歌对象：name按钮文字、audioSrc音频文件名、lrcText歌词文本（已清除开头版权信息）
+        const songList = [
+            {
+                name: "亲爱的你啊",
+                audioSrc: "qinaidenia.mp3",
+                lrcText: `[00:16.24]亲爱的你啊
+[00:19.36]我们好久没见
+[00:22.97]有没有长大一点
+[00:26.34]
+[00:29.89]破旧的以前
+[00:32.87]走不出的渔湾
+[00:37.67]停在荒草漫天
+[00:38.51]
+[00:43.56]那时家里面
+[00:46.63]妈妈总在掩面
+[00:50.32]窗外酒气弥漫
+[00:52.34]
+[00:57.40]你想你打算
+[01:00.26]忘掉满身斑斓
+[01:05.05]长出翅膀飞远
+[01:05.60]
+[01:10.56]孤单绕着思念 流淌着的不安
+[01:17.43]每一步每一晚 踩住了 梦魇
+[01:24.97]
+[01:28.17]你会翻过山 看到万丈晴天
+[01:34.96]飞鸟正越过海面
+[01:41.72]你会迎着风 放着胆唱着歌
+[01:49.54]把风景都看遍
+[01:49.96]
+[02:09.51]你会翻过山 看到万丈晴天
+[02:16.07]飞鸟正越过海面
+[02:22.89]你会迎着风 放着胆唱着歌
+[02:30.69]把风景都看遍
+[02:31.34]
+[02:36.85]你会翻过山看到万里平原
+[02:43.51]天光正穿过云间
+[02:50.37]你会握着拳赤着脚流着汗
+[02:58.20]攀过千难万险
+[02:59.06]
+[03:04.32]（哼唱）
+[03:06.38]
+[03:31.85]窗外 有小孩
+[03:34.92]哼哼唱 水声荡
+[03:39.82]远去了一只船
+[03:40.26]`
+            },
+            {
+                name: "莫怕莫怕",
+                audioSrc: "mopamopa.mp3",
+                lrcText: `[00:18.81]什么是答案？是落叶说 秋天真好看
+[00:25.54]被河流哭着打湿了 衣衫 它依然漂走
+[00:33.94]什么是相爱？是留不下 所以花要开
+[00:42.17]是明知那站台无人 归来 也声声呼唤
+[00:51.80]小小娃儿 你莫怕
+[00:56.15]莫怕风儿吹落 满山花
+[01:00.46]莫怕蝉 只喧哗一夏
+[01:04.07]人间留不住的 最美啊
+[01:09.36]小小娃儿哟 你莫怕
+[01:14.22]莫怕大雨 匆匆地落下
+[01:17.65]一个人 也像一滴雨
+[01:22.27]天空到泥土是 回了家
+[01:25.75]我们去看短暂的花吧
+[01:30.08]去爱终将逝去的爱吧
+[01:34.12]蝴蝶明年不回来 为不回来飞啊
+[01:43.07]什么最绚烂？是你与我 人间转一转
+[01:51.33]在阳光尚好的日子 朝着 朝着山上走
+[01:59.65]什么最孤单？是我知晓 所有的遗憾
+[02:09.17]却依然泪如雨下的 牵着 牵着他的手
+[02:34.84]小小娃儿哟 你莫怕
+[02:39.77]莫怕大雨 匆匆地落下
+[02:43.03]一个人 也像一滴雨
+[02:48.23]天空到泥土是 回了家
+[02:51.29]我们去看短暂的花吧
+[02:55.59]去爱终将逝去的爱吧
+[02:59.81]蝴蝶明年不回来 为不回来飞啊
+[03:08.67]什么最绚烂？是你与我 人间转一转
+[03:16.27]在阳光尚好的日子 朝着 朝着山上走
+[03:26.57]什么最孤单？是我知晓 所有的遗憾
+[03:33.95]却依然泪如雨下的 牵着 牵着他的手
+[03:43.48]什么是答案？是落叶说 秋天真好看
+[03:50.75]被河流哭着打湿了 衣衫 它依然漂走
+[04:01.06]什么是相爱？是留不下 所以花要开
+[04:08.52]是明知那站台无人 归来 也声声呼唤
+[04:16.56]是我们那么傻知晓 答案 却依然相爱
+`
+            },
+            {
+                name: "张仙语三",
+                audioSrc: "zhangxianyusan.mp3",
+                lrcText: `[00:18.39]生锈的和弦
+[00:21.92]前面坐着神仙
+[00:25.72]神仙喝红了脸
+[00:29.43]神仙没有钱
+[00:29.91]
+[00:33.52]神仙看着天边
+[00:37.41]天边放着以前
+[00:40.98]以前荡着比干
+[00:44.81]以前惦记以前
+[00:45.31]
+[00:49.15]这神仙疯癫
+[00:52.76]这神仙有谎言
+[00:56.82]他含着仙丹
+[01:00.63]他要饼干
+[01:01.01]
+[01:21.84]张三问天
+[01:25.39]张三捂脸
+[01:29.23]一座荒唐殿
+[01:32.77]一个小房间
+[01:33.15]
+[01:38.63]人是人 仙是仙
+[01:45.83]仙想饼干 人想颠
+[01:49.46]
+[02:23.56]张三问天
+[02:26.86]张三捂脸
+[02:30.67]一座荒唐殿
+[02:34.23]一个小房间
+[02:35.17]
+[02:39.92]人是人 仙是仙
+[02:47.38]仙想饼干 人想颠
+[02:48.67]
+[02:55.06]人是人 仙是仙
+[03:02.65]仙想饼干 人想颠
+[03:10.50]送你白纸 做书签
+[03:11.24]
+`
+            },
+            {
+                name: "我要你",
+                audioSrc: "woyaoni.mp3",
+                lrcText: `[00:01.71]我要 你在我身旁
+[00:06.71]
+[00:08.55]我要 你为我梳妆
+[00:14.16]
+[00:15.26]这夜的风儿吹
+[00:17.73]
+[00:18.62]吹得心痒痒 我的情郎
+[00:22.46]我在他乡 望着月亮
+[00:28.60]
+[00:29.80]都怪这月色 撩人的风光
+[00:35.95]
+[00:37.01]都怪这 guitar 弹得太凄凉
+[00:43.20]
+[00:44.31]哦 我要唱着歌
+[00:46.81]
+[00:47.59]默默把你想 我的情郎
+[00:51.56]你在何方 眼看天亮
+[00:57.73]
+[01:13.24]都怪这夜色 撩人的风光
+[01:19.43]
+[01:20.64]都怪这guitar 弹得太凄凉
+[01:26.97]
+[01:27.95]哦 我要唱着歌
+[01:30.52]
+[01:31.37]默默把你想 我的情郎
+[01:34.70]
+[01:35.21]你在何方 眼看天亮
+[01:41.47]
+[01:42.81]我要 美丽的衣裳
+[01:48.30]
+[01:50.38]为你 对镜贴花黄
+[01:55.81]
+[01:57.04]这夜色太紧张
+[01:59.74]
+[02:00.38]时间太漫长 我的情郎
+[02:04.36]我在他乡 望着月亮`
+            },
+            {
+                name: "岁岁",
+                audioSrc: "suisui.mp3",
+                lrcText: `[00:19.48]那天夕阳透过枝桠扫射我
+[00:27.58]影子重叠你追我赶笑声癫
+[00:36.12]那天脸斑驳
+[00:40.48]那天最后一面
+[00:44.90]那天天好高
+[00:49.14]高过不相见
+[00:49.70]
+[00:55.70]去过去溜达了半晌
+[01:00.12]没见你模样
+[01:04.34]那时我 半米高
+[01:08.87]翻不了院墙
+[01:13.26]说来怪 谁递了我天梯
+[01:22.28]翻过去 我翻过去了
+[01:26.94]好久不见
+[01:27.46]
+[01:50.30]去过去溜达了半晌
+[01:54.52]没见你模样
+[01:58.95]那时我 半米高
+[02:03.63]翻不了院墙
+[02:07.77]说来怪 谁递了我天梯
+[02:16.60]翻过去 我翻过去了
+[02:20.90]好久不见
+[02:29.33]谁递了我天梯
+[02:34.25]翻过去 我翻过去了
+[02:38.37]好久不见
+[02:39.60]
+[02:45.21]那天夕阳透过枝桠扫射我
+[02:53.54]影子重叠你追我赶笑声癫
+[03:02.34]那天脸斑驳
+[03:06.51]那天最后一面
+[03:11.06]那天天好高
+[03:15.41]高过不相见
+[03:16.05]`
+            }
+        ];
+
+        // =================全局变量================
+        let currentAudio = null;         // 当前播放audio对象
+        let currentLrcList = [];         // 当前歌曲解析完成歌词数组
+        let rafId = null;                // requestAnimationFrame帧循环ID，用于关闭循环
+        const btnWrap = document.getElementById('btnWrap');
+        const lyricWrap = document.getElementById('lyricWrap');
+
+        /**
+         * @function parseLrc
+         * @desc LRC解析函数，把原始字符串解析为 [{time:秒数, text:"歌词"}]
+         */
+        function parseLrc(lrcText){
+            const lines = lrcText.split('\n');
+            const result = [];
+            const reg = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/;
+            lines.forEach(line=>{
+                const match = line.match(reg);
+                if(match){
+                    const min = Number(match[1]);
+                    const sec = Number(match[2]);
+                    const ms = Number(match[3]);
+                    const time = min*60 + sec + ms/1000;
+                    const text = line.replace(reg,'').trim();
+                    if(text) result.push({time,text});
+                }
+            })
+            return result.sort((a,b)=>a.time-b.time);
+        }
+
+        /**
+         * @function renderLyric
+         * @desc 根据解析好的歌词数组，渲染页面上所有歌词DOM
+         * @param {Array} list parseLrc输出的歌词数组
+         */
+        function renderLyric(list){
+            lyricWrap.innerHTML = '';
+            list.forEach(item=>{
+                const div = document.createElement('div');
+                div.className = 'lyric-line';
+                div.innerText = item.text;
+                lyricWrap.appendChild(div);
+            });
+            lyricWrap.offsetHeight; // 强制浏览器回流，获取真实DOM尺寸
+            updateLyric(0, list);
+        }
+
+        /**
+         * @function updateLyric
+         * @desc 根据音频当前时间，更新高亮行、计算歌词滚动位移
+         * @param {Number} nowTime 当前音频播放秒数
+         * @param {Array} list 当前歌曲歌词数组
+         * 修复点：只限制顶部不要向下偏移，不限制底部，允许歌词一直向上滚动，解决唱到某句卡死
+         */
+        function updateLyric(nowTime, list){
+            if(!list || list.length ===0) return;
+            let activeIndex = 0;
+            // 找到当前时间匹配的歌词下标
+            for(let i=0;i<list.length;i++){
+                if(nowTime >= list[i].time) activeIndex = i;
+            }
+            const lines = document.querySelectorAll('.lyric-line');
+            // 更新高亮class
+            lines.forEach((line,idx)=>{
+                line.classList.toggle('active', idx === activeIndex);
+            });
+
+            const lineHeight = 40;                         // 单行歌词固定高度，和css保持40px
+            const boxHeight = lyricWrap.parentElement.clientHeight || 320; // 获取外层取景框高度
+            let translateY =  -activeIndex * lineHeight + boxHeight / 2;    // 让当前歌词行垂直居中
+
+            // 边界：只禁止歌词向下跑（播放刚开始的时候），不做底部锁死，允许后面歌词持续向上滚出屏幕
+            if(translateY>0) translateY = 0;
+
+            lyricWrap.style.transform = `translateY(${translateY}px)`;
+        }
+
+        /**
+         * @function lyricLoop
+         * @desc 帧循环，requestAnimationFrame跟随屏幕刷新率执行，比setInterval更精准适配音频
+         */
+        function lyricLoop(){
+            if(currentAudio && !currentAudio.paused && currentLrcList.length>0){
+                updateLyric(currentAudio.currentTime, currentLrcList);
+            }
+            rafId = requestAnimationFrame(lyricLoop);
+        }
+
+        /**
+         * @function stopLyricLoop
+         * @desc 停止帧循环，播放结束/暂停时调用，释放资源
+         */
+        function stopLyricLoop(){
+            if(rafId){
+                cancelAnimationFrame(rafId);
+                rafId = null;
+            }
+        }
+
+        /**
+         * @function renderButtons
+         * @desc 根据songList数组自动渲染全部播放按钮，动态创建audio标签
+         */
+        function renderButtons(){
+            btnWrap.innerHTML = "";
+            songList.forEach((song, index)=>{
+                // 创建隐藏audio音频元素
+                const audioDom = document.createElement('audio');
+                audioDom.id = `audio-${index}`;
+                const sourceDom = document.createElement('source');
+                sourceDom.src = song.audioSrc;
+                audioDom.appendChild(sourceDom);
+                document.body.appendChild(audioDom);
+
+                // 歌曲播放结束回调：关闭循环，清除按钮高亮
+                audioDom.onended = function(){
+                    document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
+                    stopLyricLoop();
+                    currentAudio = null;
+                };
+
+                // 创建按钮
+                const btn = document.createElement('button');
+                btn.className = 'play-btn';
+                btn.innerText = song.name;
+                btn.dataset.index = index;
+
+                // 按钮点击事件
+                btn.onclick = function(){
+                    if(!window.canPlayAudio) return;
+                    const songIndex = Number(this.dataset.index);
+                    const targetSong = songList[songIndex];
+                    const audio = document.getElementById(`audio-${songIndex}`);
+
+                    document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
+
+                    // 再次点击正在播放歌曲：暂停，停止帧循环
+                    if(currentAudio === audio && !audio.paused){
+                        audio.pause();
+                        stopLyricLoop();
+                        currentAudio = null;
+                        return;
+                    }
+                    // 切换歌曲：停止旧音频，停止旧循环
+                    if(currentAudio){
+                        currentAudio.pause();
+                        stopLyricLoop();
+                    }
+
+                    // 设置新播放源
+                    currentAudio = audio;
+                    this.classList.add('active');
+                    currentLrcList = parseLrc(targetSong.lrcText);
+                    renderLyric(currentLrcList);
+                    audio.play();
+                    lyricLoop(); // 启动帧循环持续刷新歌词
+                }
+                btnWrap.appendChild(btn);
+            })
+        }
+
+        // 页面加载完毕执行初始化，渲染全部按钮
+        renderButtons();
+    </script>
+</body>
+</html>
