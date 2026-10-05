@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <!-- 移动端视口适配，NFC打开浏览器正常显示 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC音乐播放器</title>
+    <title>NFC音乐播放器｜专辑循环</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
         body{background:#111;color:#fff;padding:20px}
@@ -117,7 +117,7 @@
             window.canPlayAudio = true;
         }
 
-        // =================歌曲配置区================
+        // =================歌曲配置区【任素汐专辑5首】================
         // 每首歌对象：name按钮文字、audioSrc音频文件名、lrcText歌词文本（已清除开头版权信息）
         const songList = [
             {
@@ -326,6 +326,7 @@
         // =================全局变量================
         let currentAudio = null;         // 当前播放audio对象
         let currentLrcList = [];         // 当前歌曲解析完成歌词数组
+        let currentSongIndex = -1;        // ✅新增：当前播放歌曲在songList数组下标，-1=未播放
         let rafId = null;                // requestAnimationFrame帧循环ID，用于关闭循环
         const btnWrap = document.getElementById('btnWrap');
         const lyricWrap = document.getElementById('lyricWrap');
@@ -422,6 +423,49 @@
         }
 
         /**
+         * @function playSongByIndex
+         * @desc ✅【核心专辑循环函数】按下标播放指定歌曲，用于按钮点击 + 自动切下一首
+         * @param {Number} idx songList数组下标
+         */
+        function playSongByIndex(idx){
+            if(idx <0 || idx >= songList.length) return;
+            const targetSong = songList[idx];
+            const audio = document.getElementById(`audio-${idx}`);
+
+            // 停止旧播放
+            if(currentAudio){
+                currentAudio.pause();
+                stopLyricLoop();
+            }
+            document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
+
+            // 更新全局状态
+            currentSongIndex = idx;
+            currentAudio = audio;
+            currentLrcList = parseLrc(targetSong.lrcText);
+            renderLyric(currentLrcList);
+
+            // 设置按钮高亮
+            const btn = document.querySelector(`.play-btn[data-index="${idx}"]`);
+            if(btn) btn.classList.add('active');
+
+            audio.play();
+            lyricLoop();
+
+            // =========✅ 监听歌曲结束事件，实现专辑列表循环 =========
+            audio.onended = function(){
+                stopLyricLoop();
+                // 计算下一首下标：最后一首 → 回到0，实现专辑循环
+                let nextIndex = idx + 1;
+                if(nextIndex >= songList.length){
+                    nextIndex = 0;
+                }
+                // 自动播放下一首
+                playSongByIndex(nextIndex);
+            }
+        }
+
+        /**
          * @function renderButtons
          * @desc 根据songList数组自动渲染全部播放按钮，动态创建audio标签
          */
@@ -436,13 +480,6 @@
                 audioDom.appendChild(sourceDom);
                 document.body.appendChild(audioDom);
 
-                // 歌曲播放结束回调：关闭循环，清除按钮高亮
-                audioDom.onended = function(){
-                    document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
-                    stopLyricLoop();
-                    currentAudio = null;
-                };
-
                 // 创建按钮
                 const btn = document.createElement('button');
                 btn.className = 'play-btn';
@@ -453,31 +490,16 @@
                 btn.onclick = function(){
                     if(!window.canPlayAudio) return;
                     const songIndex = Number(this.dataset.index);
-                    const targetSong = songList[songIndex];
-                    const audio = document.getElementById(`audio-${songIndex}`);
 
-                    document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
-
-                    // 再次点击正在播放歌曲：暂停，停止帧循环
-                    if(currentAudio === audio && !audio.paused){
-                        audio.pause();
-                        stopLyricLoop();
-                        currentAudio = null;
-                        return;
-                    }
-                    // 切换歌曲：停止旧音频，停止旧循环
-                    if(currentAudio){
+                    // 如果点【当前正在播放】的歌 → 暂停
+                    if(currentSongIndex === songIndex && currentAudio && !currentAudio.paused){
                         currentAudio.pause();
                         stopLyricLoop();
+                        this.classList.remove('active');
+                        return;
                     }
-
-                    // 设置新播放源
-                    currentAudio = audio;
-                    this.classList.add('active');
-                    currentLrcList = parseLrc(targetSong.lrcText);
-                    renderLyric(currentLrcList);
-                    audio.play();
-                    lyricLoop(); // 启动帧循环持续刷新歌词
+                    // 否则：播放这一首，播完自动循环专辑
+                    playSongByIndex(songIndex);
                 }
                 btnWrap.appendChild(btn);
             })
