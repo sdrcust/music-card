@@ -2,83 +2,38 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 移动端视口适配，NFC打开浏览器正常显示 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NFC音乐播放器｜专辑循环</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
         body{background:#111;color:#fff;padding:20px}
 
-        /* 顶部提示栏：代码保留，display:none视觉隐藏，后续需要提示直接删掉display:none */
+        /* 顶部提示栏：代码保留，display:none视觉隐藏 */
         .tip-bar{
-            background:#ff782b;
-            color:#000;
-            padding:10px 14px;
-            border-radius:8px;
-            margin-bottom:20px;
-            font-size:14px;
-            line-height:1.5;
-            display:none;
+            background:#ff782b;color:#000;padding:10px 14px;border-radius:8px;
+            margin-bottom:20px;font-size:14px;line-height:1.5;display:none;
         }
 
-        /* 支付宝内置浏览器拦截弹窗，检测到支付宝webview弹出提示 */
+        /* 支付宝内置浏览器拦截弹窗 */
         .alipay-mask{
-            position:fixed;
-            inset:0;
-            background:#000c;
-            z-index:9999;
-            display:none;
-            align-items:center;
-            justify-content:center;
-            padding:20px;
+            position:fixed;inset:0;background:#000c;z-index:9999;display:none;
+            align-items:center;justify-content:center;padding:20px;
         }
-        .alipay-box{
-            background:#222;
-            padding:28px 22px;
-            border-radius:12px;
-            max-width:420px;
-        }
+        .alipay-box{background:#222;padding:28px 22px;border-radius:12px;max-width:420px}
         .alipay-box h3{color:#ff6b6b;margin-bottom:12px}
         .alipay-box p{line-height:1.7;color:#eee;font-size:16px}
 
-        /* 歌曲按钮容器，自动换行 */
+        /* 歌曲按钮容器 */
         .btn-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:30px}
         .play-btn{padding:10px 16px;font-size:16px;border:none;border-radius:8px;cursor:pointer;background:#333;color:#fff}
         .play-btn.active{background:#2185ff;color:#fff}
 
-        /* ==========歌词容器========== */
-        /* lyric-box：歌词可视取景框，固定最大占屏幕60%高度，超出部分裁剪隐藏 */
-        .lyric-box{
-            min-height:320px;
-            max-height:60vh;
-            height:60vh;         /* 明确高度，用于JS计算滚动位置 */
-            overflow:hidden;     /* 框外歌词直接看不见，实现取景器效果 */
-            position:relative;
-            margin-top:16px;
-        }
-        /* lyric-inner：歌词滚动内层容器，整体上下位移实现滚动 */
-        /* transition:none：关闭css过渡动画，避免和JS高频transform冲突导致中途卡死 */
-        .lyric-inner{
-            transition:none;
-            will-change: transform; /* 浏览器GPU加速transform滚动，提升手机流畅度 */
-        }
-        /* 单行歌词：强制固定40px高度，JS滚动计算行高必须和DOM实际高度完全一致 */
-        .lyric-line{
-            padding:0 10px;
-            text-align:center;
-            font-size:18px;
-            color:#aaa;
-            height:40px;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-        }
-        /* 当前正在演唱高亮歌词 */
-        .lyric-line.active{
-            color:#2185ff;
-            font-weight:bold;
-            font-size:20px;
-        }
+        /* 歌词容器：可视取景框，固定高度，超出裁剪 */
+        .lyric-box{min-height:320px;max-height:60vh;height:60vh;overflow:hidden;position:relative;margin-top:16px}
+        .lyric-inner{transition:none;will-change:transform}
+        /* 单行歌词强制固定40px，JS滚动行高和DOM完全对齐 */
+        .lyric-line{padding:0 10px;text-align:center;font-size:18px;color:#aaa;height:40px;display:flex;align-items:center;justify-content:center}
+        .lyric-line.active{color:#2185ff;font-weight:bold;font-size:20px}
     </style>
 </head>
 <body>
@@ -90,10 +45,8 @@
         </div>
     </div>
 
-    <!-- 顶部提示，CSS隐藏 -->
-    <div class="tip-bar">
-        💡提示：如果触碰后跳到支付宝，请点右上角「在浏览器打开」才能播放歌曲
-    </div>
+    <!-- 顶部提示（CSS隐藏） -->
+    <div class="tip-bar">💡提示：如果触碰后跳到支付宝，请点右上角「在浏览器打开」才能播放歌曲</div>
 
     <!-- 歌曲按钮渲染位置 -->
     <div class="btn-wrap" id="btnWrap"></div>
@@ -104,10 +57,9 @@
     </div>
 
     <script>
-        // 判断当前是否处于支付宝内置浏览器
+        // ========== 检测支付宝内置浏览器 ==========
         function isAlipayWebView(){
-            const ua = navigator.userAgent.toLowerCase();
-            return ua.indexOf('alipay') !== -1;
+            return navigator.userAgent.toLowerCase().indexOf('alipay') !== -1;
         }
         const alipayMask = document.getElementById('alipayMask');
         if(isAlipayWebView()){
@@ -117,13 +69,15 @@
             window.canPlayAudio = true;
         }
 
-        // =================歌曲配置区【任素汐专辑5首】================
-        // 每首歌对象：name按钮文字、audioSrc音频文件名、lrcText歌词文本（已清除开头版权信息）
+        // =====================================================
+        // ==========★ 专辑配置区：后期加歌/删歌/加专辑只改这里 ★==========
+        // =====================================================
+        // 【加一首歌】复制一个 { } 块，填好 name / audioSrc / lrcText，在上一块末尾加英文逗号
+        // 【删一首歌】直接删掉对应整块 { }（注意别把前后多余的逗号留错）
+        // 【加一个专辑】复制整段 songList 数组，改名为 songList2，再在 JS 里加切换逻辑
         const songList = [
-            {
-                name: "亲爱的你啊",
-                audioSrc: "qinaidenia.mp3",
-                lrcText: `[00:16.24]亲爱的你啊
+            { name: "亲爱的你啊", audioSrc: "qinaidenia.mp3",
+              lrcText: `[00:16.24]亲爱的你啊
 [00:19.36]我们好久没见
 [00:22.97]有没有长大一点
 [00:26.34]
@@ -162,12 +116,10 @@
 [03:31.85]窗外 有小孩
 [03:34.92]哼哼唱 水声荡
 [03:39.82]远去了一只船
-[03:40.26]`
-            },
-            {
-                name: "莫怕莫怕",
-                audioSrc: "mopamopa.mp3",
-                lrcText: `[00:18.81]什么是答案？是落叶说 秋天真好看
+[03:40.26]` },
+
+            { name: "莫怕莫怕", audioSrc: "mopamopa.mp3",
+              lrcText: `[00:18.81]什么是答案？是落叶说 秋天真好看
 [00:25.54]被河流哭着打湿了 衣衫 它依然漂走
 [00:33.94]什么是相爱？是留不下 所以花要开
 [00:42.17]是明知那站台无人 归来 也声声呼唤
@@ -201,13 +153,10 @@
 [03:50.75]被河流哭着打湿了 衣衫 它依然漂走
 [04:01.06]什么是相爱？是留不下 所以花要开
 [04:08.52]是明知那站台无人 归来 也声声呼唤
-[04:16.56]是我们那么傻知晓 答案 却依然相爱
-`
-            },
-            {
-                name: "张仙语三",
-                audioSrc: "zhangxianyusan.mp3",
-                lrcText: `[00:18.39]生锈的和弦
+[04:16.56]是我们那么傻知晓 答案 却依然相爱` },
+
+            { name: "张仙语三", audioSrc: "zhangxianyusan.mp3",
+              lrcText: `[00:18.39]生锈的和弦
 [00:21.92]前面坐着神仙
 [00:25.72]神仙喝红了脸
 [00:29.43]神仙没有钱
@@ -241,13 +190,10 @@
 [02:55.06]人是人 仙是仙
 [03:02.65]仙想饼干 人想颠
 [03:10.50]送你白纸 做书签
-[03:11.24]
-`
-            },
-            {
-                name: "我要你",
-                audioSrc: "woyaoni.mp3",
-                lrcText: `[00:01.71]我要 你在我身旁
+[03:11.24]` },
+
+            { name: "我要你", audioSrc: "woyaoni.mp3",
+              lrcText: `[00:01.71]我要 你在我身旁
 [00:06.71]
 [00:08.55]我要 你为我梳妆
 [00:14.16]
@@ -282,12 +228,10 @@
 [01:57.04]这夜色太紧张
 [01:59.74]
 [02:00.38]时间太漫长 我的情郎
-[02:04.36]我在他乡 望着月亮`
-            },
-            {
-                name: "岁岁",
-                audioSrc: "suisui.mp3",
-                lrcText: `[00:19.48]那天夕阳透过枝桠扫射我
+[02:04.36]我在他乡 望着月亮` },
+
+            { name: "岁岁", audioSrc: "suisui.mp3",
+              lrcText: `[00:19.48]那天夕阳透过枝桠扫射我
 [00:27.58]影子重叠你追我赶笑声癫
 [00:36.12]那天脸斑驳
 [00:40.48]那天最后一面
@@ -319,22 +263,26 @@
 [03:06.51]那天最后一面
 [03:11.06]那天天好高
 [03:15.41]高过不相见
-[03:16.05]`
-            }
+[03:16.05]` }
         ];
+        // ==========★ 专辑配置区结束 ★==========
 
         // =================全局变量================
-        let currentAudio = null;         // 当前播放audio对象
-        let currentLrcList = [];         // 当前歌曲解析完成歌词数组
-        let currentSongIndex = -1;        // ✅新增：当前播放歌曲在songList数组下标，-1=未播放
-        let rafId = null;                // requestAnimationFrame帧循环ID，用于关闭循环
+        let currentSongIndex = -1;   // 当前播放歌曲下标
+        let currentLrcList = [];     // 当前歌曲歌词数组
+        let rafId = null;            // 帧循环ID
+
+        // ==========【核心】全局只用一个audio元素，切歌只改src，不新建元素==========
+        // 手机浏览器：手动点过的同一元素，允许继续自动播放下一首（解决"播完跳下一首但没声音"）
+        const audio = document.createElement('audio');
+        audio.id = 'mainAudio';
+        audio.preload = 'auto';
+        document.body.appendChild(audio);
+
         const btnWrap = document.getElementById('btnWrap');
         const lyricWrap = document.getElementById('lyricWrap');
 
-        /**
-         * @function parseLrc
-         * @desc LRC解析函数，把原始字符串解析为 [{time:秒数, text:"歌词"}]
-         */
+        // ========== LRC歌词解析 ==========
         function parseLrc(lrcText){
             const lines = lrcText.split('\n');
             const result = [];
@@ -342,22 +290,16 @@
             lines.forEach(line=>{
                 const match = line.match(reg);
                 if(match){
-                    const min = Number(match[1]);
-                    const sec = Number(match[2]);
-                    const ms = Number(match[3]);
+                    const min = Number(match[1]), sec = Number(match[2]), ms = Number(match[3]);
                     const time = min*60 + sec + ms/1000;
                     const text = line.replace(reg,'').trim();
                     if(text) result.push({time,text});
                 }
-            })
+            });
             return result.sort((a,b)=>a.time-b.time);
         }
 
-        /**
-         * @function renderLyric
-         * @desc 根据解析好的歌词数组，渲染页面上所有歌词DOM
-         * @param {Array} list parseLrc输出的歌词数组
-         */
+        // ========== 渲染歌词DOM ==========
         function renderLyric(list){
             lyricWrap.innerHTML = '';
             list.forEach(item=>{
@@ -366,146 +308,111 @@
                 div.innerText = item.text;
                 lyricWrap.appendChild(div);
             });
-            lyricWrap.offsetHeight; // 强制浏览器回流，获取真实DOM尺寸
+            lyricWrap.offsetHeight; // 强制回流，拿到真实高度
             updateLyric(0, list);
         }
 
-        /**
-         * @function updateLyric
-         * @desc 根据音频当前时间，更新高亮行、计算歌词滚动位移
-         * @param {Number} nowTime 当前音频播放秒数
-         * @param {Array} list 当前歌曲歌词数组
-         * 修复点：只限制顶部不要向下偏移，不限制底部，允许歌词一直向上滚动，解决唱到某句卡死
-         */
+        // ========== 更新歌词高亮与滚动（只限顶部，不限底部，避免中途卡死）==========
         function updateLyric(nowTime, list){
-            if(!list || list.length ===0) return;
+            if(!list || list.length === 0) return;
             let activeIndex = 0;
-            // 找到当前时间匹配的歌词下标
             for(let i=0;i<list.length;i++){
                 if(nowTime >= list[i].time) activeIndex = i;
             }
             const lines = document.querySelectorAll('.lyric-line');
-            // 更新高亮class
             lines.forEach((line,idx)=>{
                 line.classList.toggle('active', idx === activeIndex);
             });
-
-            const lineHeight = 40;                         // 单行歌词固定高度，和css保持40px
-            const boxHeight = lyricWrap.parentElement.clientHeight || 320; // 获取外层取景框高度
-            let translateY =  -activeIndex * lineHeight + boxHeight / 2;    // 让当前歌词行垂直居中
-
-            // 边界：只禁止歌词向下跑（播放刚开始的时候），不做底部锁死，允许后面歌词持续向上滚出屏幕
-            if(translateY>0) translateY = 0;
-
+            const lineHeight = 40;
+            const boxHeight = lyricWrap.parentElement.clientHeight || 320;
+            let translateY = -activeIndex * lineHeight + boxHeight/2;
+            if(translateY > 0) translateY = 0; // 只限制开头，不锁底部
             lyricWrap.style.transform = `translateY(${translateY}px)`;
         }
 
-        /**
-         * @function lyricLoop
-         * @desc 帧循环，requestAnimationFrame跟随屏幕刷新率执行，比setInterval更精准适配音频
-         */
+        // ========== 帧循环更新歌词 ==========
         function lyricLoop(){
-            if(currentAudio && !currentAudio.paused && currentLrcList.length>0){
-                updateLyric(currentAudio.currentTime, currentLrcList);
+            if(!audio.paused && currentLrcList.length>0){
+                updateLyric(audio.currentTime, currentLrcList);
             }
             rafId = requestAnimationFrame(lyricLoop);
         }
-
-        /**
-         * @function stopLyricLoop
-         * @desc 停止帧循环，播放结束/暂停时调用，释放资源
-         */
         function stopLyricLoop(){
-            if(rafId){
-                cancelAnimationFrame(rafId);
-                rafId = null;
-            }
+            if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
         }
 
-        /**
-         * @function playSongByIndex
-         * @desc ✅【核心专辑循环函数】按下标播放指定歌曲，用于按钮点击 + 自动切下一首
-         * @param {Number} idx songList数组下标
-         */
+        // ========== Media Session：锁屏后继续播放 + 锁屏控制条 ==========
+        // 注意：这里不申请屏幕唤醒锁，息屏后屏幕保持熄灭，但音频靠mediaSession继续播
+        function updateMediaSession(title){
+            if(!('mediaSession' in navigator)) return;
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: title, artist: '任素汐', album: '任素汐专辑'
+            });
+            navigator.mediaSession.setActionHandler('play', ()=>{ audio.play(); });
+            navigator.mediaSession.setActionHandler('pause', ()=>{ audio.pause(); });
+            navigator.mediaSession.setActionHandler('previoustrack', ()=>{ playSongByIndex((currentSongIndex-1+songList.length)%songList.length); });
+            navigator.mediaSession.setActionHandler('nexttrack', ()=>{ playSongByIndex((currentSongIndex+1)%songList.length); });
+        }
+
+        // ==========【核心】按下标播放歌曲（按钮点击 + 自动切下一首 共用）==========
         function playSongByIndex(idx){
-            if(idx <0 || idx >= songList.length) return;
+            if(idx<0 || idx>=songList.length) return;
             const targetSong = songList[idx];
-            const audio = document.getElementById(`audio-${idx}`);
-
-            // 停止旧播放
-            if(currentAudio){
-                currentAudio.pause();
-                stopLyricLoop();
-            }
-            document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
-
-            // 更新全局状态
             currentSongIndex = idx;
-            currentAudio = audio;
-            currentLrcList = parseLrc(targetSong.lrcText);
-            renderLyric(currentLrcList);
 
-            // 设置按钮高亮
+            // 更新按钮高亮
+            document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
             const btn = document.querySelector(`.play-btn[data-index="${idx}"]`);
             if(btn) btn.classList.add('active');
 
-            audio.play();
-            lyricLoop();
+            // 更新歌词
+            currentLrcList = parseLrc(targetSong.lrcText);
+            renderLyric(currentLrcList);
 
-            // =========✅ 监听歌曲结束事件，实现专辑列表循环 =========
-            audio.onended = function(){
-                stopLyricLoop();
-                // 计算下一首下标：最后一首 → 回到0，实现专辑循环
-                let nextIndex = idx + 1;
-                if(nextIndex >= songList.length){
-                    nextIndex = 0;
-                }
-                // 自动播放下一首
-                playSongByIndex(nextIndex);
-            }
+            // 【关键】复用同一个audio元素，只替换src，保留已获授权的播放状态
+            audio.src = targetSong.audioSrc;
+            audio.play().catch(err=>{
+                console.warn('自动播放被拦截，请点击歌曲按钮继续', err);
+            });
+
+            updateMediaSession(targetSong.name);
+            lyricLoop();
         }
 
-        /**
-         * @function renderButtons
-         * @desc 根据songList数组自动渲染全部播放按钮，动态创建audio标签
-         */
+        // ========== 歌曲结束事件：自动切下一首，实现专辑循环 ==========
+        audio.onended = function(){
+            stopLyricLoop();
+            let next = currentSongIndex + 1;
+            if(next >= songList.length) next = 0; // 最后一首回到第一首
+            playSongByIndex(next);
+        };
+
+        // ========== 渲染歌曲按钮 ==========
         function renderButtons(){
             btnWrap.innerHTML = "";
             songList.forEach((song, index)=>{
-                // 创建隐藏audio音频元素
-                const audioDom = document.createElement('audio');
-                audioDom.id = `audio-${index}`;
-                const sourceDom = document.createElement('source');
-                sourceDom.src = song.audioSrc;
-                audioDom.appendChild(sourceDom);
-                document.body.appendChild(audioDom);
-
-                // 创建按钮
                 const btn = document.createElement('button');
                 btn.className = 'play-btn';
                 btn.innerText = song.name;
                 btn.dataset.index = index;
-
-                // 按钮点击事件
                 btn.onclick = function(){
                     if(!window.canPlayAudio) return;
                     const songIndex = Number(this.dataset.index);
-
-                    // 如果点【当前正在播放】的歌 → 暂停
-                    if(currentSongIndex === songIndex && currentAudio && !currentAudio.paused){
-                        currentAudio.pause();
+                    // 点当前正在播放的歌 → 暂停
+                    if(currentSongIndex === songIndex && !audio.paused){
+                        audio.pause();
                         stopLyricLoop();
                         this.classList.remove('active');
                         return;
                     }
-                    // 否则：播放这一首，播完自动循环专辑
+                    // 否则：播放这一首（用户手势内，一定不会被拦截）
                     playSongByIndex(songIndex);
-                }
+                };
                 btnWrap.appendChild(btn);
-            })
+            });
         }
 
-        // 页面加载完毕执行初始化，渲染全部按钮
+        // ========== 页面初始化 ==========
         renderButtons();
     </script>
 </body>
