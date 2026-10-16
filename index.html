@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NFC音乐播放器｜专辑循环</title>
+    <title>NFC音乐播放器｜多专辑循环</title>
     <style>
         *{margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
         body{background:#111;color:#fff;padding:20px}
@@ -14,7 +14,7 @@
             margin-bottom:20px;font-size:14px;line-height:1.5;display:none;
         }
 
-        /* 支付宝内置浏览器拦截弹窗 */
+        /* 支付宝内置浏览器拦截弹窗（检测到支付宝webview弹出） */
         .alipay-mask{
             position:fixed;inset:0;background:#000c;z-index:9999;display:none;
             align-items:center;justify-content:center;padding:20px;
@@ -23,17 +23,25 @@
         .alipay-box h3{color:#ff6b6b;margin-bottom:12px}
         .alipay-box p{line-height:1.7;color:#eee;font-size:16px}
 
-        /* 歌曲按钮容器 */
+        /* 专辑切换按钮行 */
+        .album-bar{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+        .album-btn{padding:8px 16px;font-size:15px;border:none;border-radius:8px;cursor:pointer;background:#444;color:#fff}
+        .album-btn.active{background:#ff782b;color:#fff}   /* 当前专辑橙色高亮 */
+
+        /* 当前专辑名 */
+        .album-title{font-size:16px;color:#ffd9a8;margin-bottom:16px}
+
+        /* 歌曲按钮容器，自动换行 */
         .btn-wrap{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:30px}
         .play-btn{padding:10px 16px;font-size:16px;border:none;border-radius:8px;cursor:pointer;background:#333;color:#fff}
-        .play-btn.active{background:#2185ff;color:#fff}
+        .play-btn.active{background:#2185ff;color:#fff}   /* 正在播放的歌蓝色高亮 */
 
-        /* 歌词容器：可视取景框，固定高度，超出裁剪 */
+        /* 歌词外层可视取景框：固定高度，超出裁剪 */
         .lyric-box{min-height:320px;max-height:60vh;height:60vh;overflow:hidden;position:relative;margin-top:16px}
-        .lyric-inner{transition:none;will-change:transform}
+        .lyric-inner{transition:none;will-change:transform}   /* transition关闭，避免与JS高频位移冲突卡死 */
         /* 单行歌词强制固定40px，JS滚动行高和DOM完全对齐 */
         .lyric-line{padding:0 10px;text-align:center;font-size:18px;color:#aaa;height:40px;display:flex;align-items:center;justify-content:center}
-        .lyric-line.active{color:#2185ff;font-weight:bold;font-size:20px}
+        .lyric-line.active{color:#2185ff;font-weight:bold;font-size:20px}   /* 当前演唱歌词高亮放大 */
     </style>
 </head>
 <body>
@@ -45,10 +53,16 @@
         </div>
     </div>
 
-    <!-- 顶部提示（CSS隐藏） -->
+    <!-- 顶部提示（CSS已隐藏） -->
     <div class="tip-bar">💡提示：如果触碰后跳到支付宝，请点右上角「在浏览器打开」才能播放歌曲</div>
 
-    <!-- 歌曲按钮渲染位置 -->
+    <!-- 专辑切换按钮渲染位置（JS自动生成） -->
+    <div class="album-bar" id="albumBar"></div>
+
+    <!-- 当前专辑名显示 -->
+    <div class="album-title" id="albumTitle"></div>
+
+    <!-- 歌曲按钮渲染位置（JS自动生成） -->
     <div class="btn-wrap" id="btnWrap"></div>
 
     <!-- 歌词DOM容器 -->
@@ -64,20 +78,23 @@
         const alipayMask = document.getElementById('alipayMask');
         if(isAlipayWebView()){
             alipayMask.style.display = 'flex';
-            window.canPlayAudio = false;
+            window.canPlayAudio = false;   // 支付宝环境禁止播放
         }else{
             window.canPlayAudio = true;
         }
 
         // =====================================================
-        // ==========★ 专辑配置区：后期加歌/删歌/加专辑只改这里 ★==========
+        // ==========★ 专辑配置区：加专辑/加歌/删歌只改这里 ★==========
         // =====================================================
-        // 【加一首歌】复制一个 { } 块，填好 name / audioSrc / lrcText，在上一块末尾加英文逗号
-        // 【删一首歌】直接删掉对应整块 { }（注意别把前后多余的逗号留错）
-        // 【加一个专辑】复制整段 songList 数组，改名为 songList2，再在 JS 里加切换逻辑
-        const songList = [
-            { name: "亲爱的你啊", audioSrc: "qinaidenia.mp3",
-              lrcText: `[00:16.24]亲爱的你啊
+        // 【加一个专辑】在 albums 末尾复制一个 { name:..., songs:[...] }，逗号隔开
+        // 【专辑里加一首歌】在该专辑 songs 里复制一个 { }，填 name/audioSrc/lrcText
+        // 【删一首歌/一个专辑】直接删对应块，注意逗号别留错
+        const albums = [
+            {
+                name: "任素汐",          // 专辑名（显示在专辑切换按钮 + 顶部专辑名）
+                songs: [
+                    { name: "亲爱的你啊", audioSrc: "qinaidenia.mp3",   // 歌名 + mp3文件名(同目录、英文无空格)
+                      lrcText: `[00:16.24]亲爱的你啊
 [00:19.36]我们好久没见
 [00:22.97]有没有长大一点
 [00:26.34]
@@ -117,9 +134,8 @@
 [03:34.92]哼哼唱 水声荡
 [03:39.82]远去了一只船
 [03:40.26]` },
-
-            { name: "莫怕莫怕", audioSrc: "mopamopa.mp3",
-              lrcText: `[00:18.81]什么是答案？是落叶说 秋天真好看
+                    { name: "莫怕莫怕", audioSrc: "mopamopa.mp3",
+                      lrcText: `[00:18.81]什么是答案？是落叶说 秋天真好看
 [00:25.54]被河流哭着打湿了 衣衫 它依然漂走
 [00:33.94]什么是相爱？是留不下 所以花要开
 [00:42.17]是明知那站台无人 归来 也声声呼唤
@@ -154,9 +170,8 @@
 [04:01.06]什么是相爱？是留不下 所以花要开
 [04:08.52]是明知那站台无人 归来 也声声呼唤
 [04:16.56]是我们那么傻知晓 答案 却依然相爱` },
-
-            { name: "张仙语三", audioSrc: "zhangxianyusan.mp3",
-              lrcText: `[00:18.39]生锈的和弦
+                    { name: "张仙语三", audioSrc: "zhangxianyusan.mp3",
+                      lrcText: `[00:18.39]生锈的和弦
 [00:21.92]前面坐着神仙
 [00:25.72]神仙喝红了脸
 [00:29.43]神仙没有钱
@@ -191,9 +206,8 @@
 [03:02.65]仙想饼干 人想颠
 [03:10.50]送你白纸 做书签
 [03:11.24]` },
-
-            { name: "我要你", audioSrc: "woyaoni.mp3",
-              lrcText: `[00:01.71]我要 你在我身旁
+                    { name: "我要你", audioSrc: "woyaoni.mp3",
+                      lrcText: `[00:01.71]我要 你在我身旁
 [00:06.71]
 [00:08.55]我要 你为我梳妆
 [00:14.16]
@@ -229,9 +243,8 @@
 [01:59.74]
 [02:00.38]时间太漫长 我的情郎
 [02:04.36]我在他乡 望着月亮` },
-
-            { name: "岁岁", audioSrc: "suisui.mp3",
-              lrcText: `[00:19.48]那天夕阳透过枝桠扫射我
+                    { name: "岁岁", audioSrc: "suisui.mp3",
+                      lrcText: `[00:19.48]那天夕阳透过枝桠扫射我
 [00:27.58]影子重叠你追我赶笑声癫
 [00:36.12]那天脸斑驳
 [00:40.48]那天最后一面
@@ -264,25 +277,125 @@
 [03:11.06]那天天好高
 [03:15.41]高过不相见
 [03:16.05]` }
+                ]
+            },
+            {
+                // ===== "经典" 专辑（新建占位，等你填歌）=====
+                // 规则：把下面占位 { } 复制N份，改 name/audioSrc/lrcText 即可加歌
+                name: "经典",
+                songs: [
+                    { name: "向往神鹰", audioSrc: "xiangwangshenying.mp3",
+                      lrcText: `[00:54.75]在每一天太阳
+[00:59.13]噢升起的地方
+[01:03.27]银色的神鹰
+[01:05.19]啊来到了古老村庄
+[01:11.31]雪域之外的人们
+[01:15.69]来自四面八方
+[01:19.65]仙女般的空中小姐
+[01:24.03]翩翩而降
+[01:28.11]祖先们一生也
+[01:32.16]没有走完的路
+[01:35.88]啊神鹰啊
+[01:42.39]神鹰啊转眼就改变了大地的模样 啊模样
+[02:01.05]哦迷迷茫茫的山
+[02:09.30]哦遥遥远远的路
+[02:19.83]哦是谁在天地间自由地飞翔
+[02:27.60]啊神鹰啊
+[02:32.64]你把我的思念带向远方
+[02:40.38]噢远方
+[03:18.96]心儿伴随神鹰
+[03:21.75]噢飞向那远方
+[03:27.60]想看看城市的灯火
+[03:30.78]和蓝色的海洋
+[03:36.21]当梦想成真
+[03:40.32]走进宽敞的机舱
+[03:44.43]俯看天外世界
+[03:48.60]止不住热泪盈眶
+[03:52.71]父辈们朝圣的脚步还在回响
+[04:02.58]啊神鹰啊神鹰啊
+[04:11.76]我已经告别阼天
+[04:15.87]找到了生命的亮光
+[04:21.90]哦摇摇滚滚的风
+[04:36.21]哦 飘飘洒洒的雨
+[04:44.52]哦蓝天的儿子又回到了故乡
+[04:52.50]啊神鹰啊
+[04:57.21]你使我实现了童年的梦想
+[05:05.73]哦梦想
+` },
+//                    { name: "待加歌名1", audioSrc: "jingdian1.mp3",
+//                      lrcText: `[00:00.00]第一句歌词（此处填LRC歌词）
+//[00:10.00]第二句歌词
+//[00:20.00]第三句歌词` },
+//                     { name: "待加歌名2", audioSrc: "jingdian1.mp3",
+//                     lrcText: `[00:00.00]第一句歌词（此处填LRC歌词）
+//[00:10.00]第二句歌词
+//[00:20.00]第三句歌词` },
+                    { name: "时间你能不能走慢点", audioSrc: "shijianninengbunengzoumandian.mp3",
+                      lrcText: `[00:03.45]最怕的就是
+[00:05.79]到了这个年纪
+[00:08.52]钱没挣到几分
+[00:11.07]病却落下一身
+[00:14.46]回头一看青春早就不见了
+[00:19.11]只剩下一个不敢倒下的中年人
+[00:46.86]可惜年少不懂事
+[00:51.15]懂事之时已到中年
+[00:55.26]往日的一切仿佛昨天
+[00:59.01]我却再也回不到从前
+[01:03.78]总在深夜难入眠
+[01:07.98]满腹的心酸无人言
+[01:12.15]拼搏了半生老了容颜
+[01:15.87]就连身体也大不如从前
+[01:20.52]时间你能不能走慢点
+[01:24.57]那些豪言我还没能兑现
+[01:29.07]以为走出半生仍是少年
+[01:32.73]直到白发遮住了双眼
+[01:37.38]时间你能不能走慢点
+[01:41.40]我也想停下脚歇一歇
+[01:45.90]不想愧对家人的笑脸
+[01:49.53]只能咬紧牙关大步向前
+[02:15.39]总在深夜难入眠
+[02:19.56]满腹的心酸无人言
+[02:23.76]拼搏了半生老了容颜
+[02:27.48]就连身体也大不如从前
+[02:32.07]时间你能不能走慢点
+[02:36.18]那些豪言我还没能兑现
+[02:40.65]以为走出半生仍是少年
+[02:44.31]直到白发遮住了双眼
+[02:48.87]时间你能不能走慢点
+[02:52.98]我也想停下脚歇一歇
+[02:57.48]不想愧对家人的笑脸
+[03:01.14]只能咬紧牙关大步向前
+` }
+                    // ↑ 复制这个块加歌；删掉它专辑会变空（空专辑可切换但无歌可播）
+                ]
+            }
         ];
         // ==========★ 专辑配置区结束 ★==========
 
         // =================全局变量================
-        let currentSongIndex = -1;   // 当前播放歌曲下标
+        let activeAlbumIndex = 0;    // 当前专辑下标
+        let currentSongIndex = -1;   // 当前播放歌曲在【当前专辑】里的下标
         let currentLrcList = [];     // 当前歌曲歌词数组
         let rafId = null;            // 帧循环ID
 
         // ==========【核心】全局只用一个audio元素，切歌只改src，不新建元素==========
-        // 手机浏览器：手动点过的同一元素，允许继续自动播放下一首（解决"播完跳下一首但没声音"）
+        // 手机浏览器：手动点过的同一元素，允许继续自动播下一首（解决"播完跳下一首但没声音"）
         const audio = document.createElement('audio');
         audio.id = 'mainAudio';
         audio.preload = 'auto';
         document.body.appendChild(audio);
 
+        // 页面元素引用
+        const albumBar = document.getElementById('albumBar');
+        const albumTitle = document.getElementById('albumTitle');
         const btnWrap = document.getElementById('btnWrap');
         const lyricWrap = document.getElementById('lyricWrap');
 
-        // ========== LRC歌词解析 ==========
+        // 当前专辑快捷引用
+        function curAlbum(){ return albums[activeAlbumIndex]; }
+        function curSongs(){ return curAlbum().songs; }
+
+        // ========== LRC歌词解析：把文本解析成 [{time:秒数, text:"歌词"}] ==========
         function parseLrc(lrcText){
             const lines = lrcText.split('\n');
             const result = [];
@@ -296,7 +409,7 @@
                     if(text) result.push({time,text});
                 }
             });
-            return result.sort((a,b)=>a.time-b.time);
+            return result.sort((a,b)=>a.time-b.time);   // 按时间排序
         }
 
         // ========== 渲染歌词DOM ==========
@@ -308,7 +421,7 @@
                 div.innerText = item.text;
                 lyricWrap.appendChild(div);
             });
-            lyricWrap.offsetHeight; // 强制回流，拿到真实高度
+            lyricWrap.offsetHeight;   // 强制回流，拿到真实高度
             updateLyric(0, list);
         }
 
@@ -317,7 +430,7 @@
             if(!list || list.length === 0) return;
             let activeIndex = 0;
             for(let i=0;i<list.length;i++){
-                if(nowTime >= list[i].time) activeIndex = i;
+                if(nowTime >= list[i].time) activeIndex = i;   // 找到当前时间对应歌词
             }
             const lines = document.querySelectorAll('.lyric-line');
             lines.forEach((line,idx)=>{
@@ -325,12 +438,12 @@
             });
             const lineHeight = 40;
             const boxHeight = lyricWrap.parentElement.clientHeight || 320;
-            let translateY = -activeIndex * lineHeight + boxHeight/2;
-            if(translateY > 0) translateY = 0; // 只限制开头，不锁底部
+            let translateY = -activeIndex * lineHeight + boxHeight/2;   // 当前行垂直居中
+            if(translateY > 0) translateY = 0;   // 只限制开头，不锁底部
             lyricWrap.style.transform = `translateY(${translateY}px)`;
         }
 
-        // ========== 帧循环更新歌词 ==========
+        // ========== 帧循环更新歌词（跟随屏幕刷新率，比定时器更准）==========
         function lyricLoop(){
             if(!audio.paused && currentLrcList.length>0){
                 updateLyric(audio.currentTime, currentLrcList);
@@ -341,26 +454,26 @@
             if(rafId){ cancelAnimationFrame(rafId); rafId = null; }
         }
 
-        // ========== Media Session：锁屏后继续播放 + 锁屏控制条 ==========
-        // 注意：这里不申请屏幕唤醒锁，息屏后屏幕保持熄灭，但音频靠mediaSession继续播
-        function updateMediaSession(title){
+        // ========== Media Session：息屏后继续播放 + 锁屏控制条（不申请唤醒锁，听歌不锁屏）==========
+        function updateMediaSession(title, albumName){
             if(!('mediaSession' in navigator)) return;
             navigator.mediaSession.metadata = new MediaMetadata({
-                title: title, artist: '任素汐', album: '任素汐专辑'
+                title: title, artist: albumName, album: albumName
             });
             navigator.mediaSession.setActionHandler('play', ()=>{ audio.play(); });
             navigator.mediaSession.setActionHandler('pause', ()=>{ audio.pause(); });
-            navigator.mediaSession.setActionHandler('previoustrack', ()=>{ playSongByIndex((currentSongIndex-1+songList.length)%songList.length); });
-            navigator.mediaSession.setActionHandler('nexttrack', ()=>{ playSongByIndex((currentSongIndex+1)%songList.length); });
+            navigator.mediaSession.setActionHandler('previoustrack', ()=>{ playSongByIndex((currentSongIndex-1+curSongs().length)%curSongs().length); });
+            navigator.mediaSession.setActionHandler('nexttrack', ()=>{ playSongByIndex((currentSongIndex+1)%curSongs().length); });
         }
 
-        // ==========【核心】按下标播放歌曲（按钮点击 + 自动切下一首 共用）==========
+        // ==========【核心】按下标播放当前专辑里的歌（按钮点击 + 自动切下一首 共用）==========
         function playSongByIndex(idx){
-            if(idx<0 || idx>=songList.length) return;
-            const targetSong = songList[idx];
+            const songs = curSongs();
+            if(idx<0 || idx>=songs.length) return;
+            const targetSong = songs[idx];
             currentSongIndex = idx;
 
-            // 更新按钮高亮
+            // 更新歌曲按钮高亮
             document.querySelectorAll('.play-btn').forEach(b=>b.classList.remove('active'));
             const btn = document.querySelector(`.play-btn[data-index="${idx}"]`);
             if(btn) btn.classList.add('active');
@@ -375,22 +488,56 @@
                 console.warn('自动播放被拦截，请点击歌曲按钮继续', err);
             });
 
-            updateMediaSession(targetSong.name);
+            updateMediaSession(targetSong.name, curAlbum().name);
             lyricLoop();
         }
 
-        // ========== 歌曲结束事件：自动切下一首，实现专辑循环 ==========
+        // ========== 歌曲结束事件：自动切下一首，实现当前专辑循环 ==========
         audio.onended = function(){
             stopLyricLoop();
+            const songs = curSongs();
+            if(songs.length === 0) return;
             let next = currentSongIndex + 1;
-            if(next >= songList.length) next = 0; // 最后一首回到第一首
+            if(next >= songs.length) next = 0;   // 最后一首回到第一首
             playSongByIndex(next);
         };
 
-        // ========== 渲染歌曲按钮 ==========
-        function renderButtons(){
+        // ========== 切换专辑 ==========
+        function switchAlbum(albumIdx){
+            if(albumIdx === activeAlbumIndex) return;   // 已在当前专辑，不重复切换
+            if(!audio.paused){ audio.pause(); }          // 停掉当前播放
+            stopLyricLoop();
+            activeAlbumIndex = albumIdx;
+            currentSongIndex = -1;
+
+            // 更新专辑按钮高亮 + 专辑名
+            document.querySelectorAll('.album-btn').forEach(b=>b.classList.remove('active'));
+            const ab = document.querySelector(`.album-btn[data-idx="${albumIdx}"]`);
+            if(ab) ab.classList.add('active');
+            albumTitle.innerText = "专辑 · " + curAlbum().name;
+
+            renderSongButtons();   // 重新渲染该专辑歌曲按钮
+            lyricWrap.innerHTML = '';   // 清空歌词
+        }
+
+        // ========== 渲染专辑切换按钮（自动根据albums生成）==========
+        function renderAlbumBar(){
+            albumBar.innerHTML = "";
+            albums.forEach((album, idx)=>{
+                const btn = document.createElement('button');
+                btn.className = 'album-btn' + (idx===activeAlbumIndex?' active':'');
+                btn.innerText = album.name;
+                btn.dataset.idx = idx;
+                btn.onclick = function(){ if(window.canPlayAudio) switchAlbum(idx); };
+                albumBar.appendChild(btn);
+            });
+            albumTitle.innerText = "专辑 · " + curAlbum().name;
+        }
+
+        // ========== 渲染当前专辑的歌曲按钮（自动生成）==========
+        function renderSongButtons(){
             btnWrap.innerHTML = "";
-            songList.forEach((song, index)=>{
+            curSongs().forEach((song, index)=>{
                 const btn = document.createElement('button');
                 btn.className = 'play-btn';
                 btn.innerText = song.name;
@@ -405,15 +552,15 @@
                         this.classList.remove('active');
                         return;
                     }
-                    // 否则：播放这一首（用户手势内，一定不会被拦截）
-                    playSongByIndex(songIndex);
+                    playSongByIndex(songIndex);   // 用户手势内播放，不会被拦截
                 };
                 btnWrap.appendChild(btn);
             });
         }
 
         // ========== 页面初始化 ==========
-        renderButtons();
+        renderAlbumBar();
+        renderSongButtons();
     </script>
 </body>
 </html>
